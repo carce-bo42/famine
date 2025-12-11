@@ -174,6 +174,14 @@ static int get_elf_size(void *map, Elf64_Ehdr *ehdr, size_t actual_size, size_t 
     return FAMINE_STATUS_OK;
 }
 
+static void mark_file_as_patched(void *map) {
+    ((Elf64_Ehdr *)(map))->e_ident[EI_NIDENT-1] = 1;
+}
+
+static int file_is_patched(void *map) {
+    return ((Elf64_Ehdr *)(map))->e_ident[EI_NIDENT-1] == 1;
+}
+
 
 int patch_file(void *map, size_t size) {
 
@@ -191,6 +199,10 @@ int patch_file(void *map, size_t size) {
     TRY_RET(get_elf_size(map, ehdr, size, &computed_size));
     if (size != computed_size) {
         return ERR_CORRUPTED_FILE;
+    }
+
+    if (file_is_patched(map)) {
+        return 0;
     }
 
     /* Loadable program segments cannot overlap or not be aligned. This means padding is added
@@ -221,6 +233,7 @@ int patch_file(void *map, size_t size) {
         return 0;
     }
     memcpy(offset, payload, sizeof(payload));
+    mark_file_as_patched(map);
     return 0;
 }
 
@@ -302,8 +315,5 @@ int main(void) {
         }
         closedir(directory);
     }
-
-
-
     return 0;
 }
