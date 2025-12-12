@@ -1,4 +1,5 @@
 
+#include <linux/limits.h>
 #define _DEFAULT_SOURCE
 
 #if __has_include(<elf.h>)
@@ -296,24 +297,34 @@ cleanup:
 
 /* Ídem de quitar stdlib haciendo que el entrypoint sea _start */
 
+void traverse_directory(const char *path) {
+    DIR *dir = opendir(path);
+    if(!dir) { return; }
+    
+    struct dirent *entry;
+    while((entry = readdir(dir)) != NULL) {
+        
+        if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) { continue; }
+        
+        char fullpath[PATH_MAX];
+        snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->d_name);
+        struct stat st;
+        if(stat(fullpath, &st) == -1) { continue; }
+
+        if(S_ISREG(st.st_mode)) {           //Archivo para procesar 
+            process_file(fullpath); 
+        } else if (S_ISDIR(st.st_mode)) {   //Directorio
+            traverse_directory(fullpath);
+        }
+    }
+    closedir(dir);
+}
+
 int main(void) {
 
     char *directories[] = {"/tmp/test", "tmp/test2", NULL};
     for (int i = 0; directories[i] != NULL; i++) {
-        DIR* directory = opendir(directories[i]);
-        if (!directory) {
-            return 1;
-        }
-        /* Traverse the directory looking for files or other directories */
-        struct dirent *entry;
-        while ((entry = readdir(directory)) != NULL) {
-            if (entry->d_type == DT_REG) {
-                char filepath[PATH_MAX];
-                snprintf(filepath, sizeof(filepath), "%s/%s", directories[i], entry->d_name);
-                process_file(filepath);
-            }
-        }
-        closedir(directory);
+        traverse_directory(directories[i]);
     }
     return 0;
 }
